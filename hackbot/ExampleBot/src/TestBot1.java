@@ -1,7 +1,7 @@
 import bwapi.*;
 import bwta.BWTA;
 import bwta.BaseLocation;
-import java.util.Random;
+import java.util.*;
 
 public class TestBot1 extends DefaultBWListener {
 
@@ -13,6 +13,7 @@ public class TestBot1 extends DefaultBWListener {
     
     public int workers;
     public int marines;
+    public List<BaseLocation>;
     
     Random rand = new Random();
 
@@ -95,7 +96,7 @@ public class TestBot1 extends DefaultBWListener {
             }
             
             //if we're running out of supply and have enough minerals ...
-            if ((self.supplyTotal() - self.supplyUsed() < 2) && (self.minerals() >= 100)) {
+            if ((self.supplyTotal() - self.supplyUsed() < 4) && (self.minerals() >= 100)) {
             	//iterate over units to find a worker
         		if (myUnit.getType() == UnitType.Terran_SCV) {
         			//get a nice place to build a supply depot
@@ -110,8 +111,8 @@ public class TestBot1 extends DefaultBWListener {
             }
             
             // If there are enough minerals, supply, and there are at least 12 workers, build a barrack.
-            // - Limit barracks to 2
-            if ((self.minerals() > 250) && self.allUnitCount(UnitType.Terran_Barracks) < 2 && self.allUnitCount(UnitType.Terran_SCV) > 11) {
+            // - Limit barracks to 3
+            if ((self.minerals() > 250) && self.allUnitCount(UnitType.Terran_Barracks) < 3 && self.allUnitCount(UnitType.Terran_SCV) > 11) {
             	if (myUnit.getType() == UnitType.Terran_SCV) {
         			//get a nice place to build a barrack
         			TilePosition buildTile =
@@ -126,10 +127,21 @@ public class TestBot1 extends DefaultBWListener {
             
             //if we have enough workers and supply build some marines ...
             if ((self.supplyUsed() < self.supplyTotal()) && (self.minerals() >= 150) && self.allUnitCount(UnitType.Terran_Barracks) > 0) {
-            	System.out.println("Trying to train some marines, we are at unit (" + myUnit.toString() + ") a " + myUnit.getType().toString() + " ID: " + myUnit.getID());
         		if (myUnit.getType() == UnitType.Terran_Barracks && myUnit.getTrainingQueue().size() < 2) {
         			myUnit.train(UnitType.Terran_Marine);
         		}
+            }
+            
+          // If this unit is a marine attack around the base
+            if (self.allUnitCount(UnitType.Terran_Marine) > 30 && myUnit.getType() == UnitType.Terran_Barracks) {
+            	double longest = 0;
+            	BaseLocation targetBase = null;
+            	for (BaseLocation b : BWTA.getBaseLocations()) {
+            		if (myUnit.getPosition().getDistance(b.getPosition()) > longest) {
+            			targetBase = b;
+            		}
+            	}
+            	myUnit.attack(targetBase.getPosition());
             }
         }
 
