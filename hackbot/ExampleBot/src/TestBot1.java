@@ -1,6 +1,7 @@
 import bwapi.*;
 import bwta.BWTA;
 import bwta.BaseLocation;
+import java.util.Random;
 
 public class TestBot1 extends DefaultBWListener {
 
@@ -9,6 +10,11 @@ public class TestBot1 extends DefaultBWListener {
     private Game game;
 
     private Player self;
+    
+    public int workers;
+    public int marines;
+    
+    Random rand = new Random();
 
     public void run() {
         mirror.getModule().setEventListener(this);
@@ -17,7 +23,13 @@ public class TestBot1 extends DefaultBWListener {
 
     @Override
     public void onUnitCreate(Unit unit) {
-        System.out.println("New unit discovered " + unit.getType());
+        if (unit.getType() == UnitType.Terran_SCV) {
+        	workers++;
+        } else if (unit.getType() == UnitType.Terran_Marine) {
+        	marines++;
+        }
+        System.out.println("New unit discovered " + unit.getType() + "\n\tWORKERS = " + workers + "\n\tMARINES = " + marines);
+
     }
 
     @Override
@@ -40,6 +52,12 @@ public class TestBot1 extends DefaultBWListener {
         	}
         	System.out.println();
         }
+        
+        for (Unit u : self.getUnits()) {
+        	if (u.getType() == UnitType.Terran_SCV) {
+        		workers++;
+        	}
+        }
 
     }
 
@@ -53,8 +71,6 @@ public class TestBot1 extends DefaultBWListener {
         //iterate through my units
         for (Unit myUnit : self.getUnits()) {
             units.append(myUnit.getType()).append(" ").append(myUnit.getTilePosition()).append("\n");
-            game.drawTextMap(myUnit.getPosition().getX(), myUnit.getPosition().getY(),
-        			"TilePos: "+myUnit.getTilePosition().toString()+" Pos: "+myUnit.getPosition().toString());
             game.drawTextMap(myUnit.getPosition().getX(), myUnit.getPosition().getY(), myUnit.getOrder().toString());
             game.drawLineMap(myUnit.getPosition().getX(), myUnit.getPosition().getY(), myUnit.getOrderTargetPosition().getX(),
             		myUnit.getOrderTargetPosition().getY(), bwapi.Color.Black);
@@ -69,12 +85,20 @@ public class TestBot1 extends DefaultBWListener {
                 Unit closestMineral = null;
 
                 //find the closest mineral
+                boolean mineralFound = false;
                 for (Unit neutralUnit : game.neutral().getUnits()) {
                     if (neutralUnit.getType().isMineralField()) {
                         if (closestMineral == null || myUnit.getDistance(neutralUnit) < myUnit.getDistance(closestMineral)) {
                             closestMineral = neutralUnit;
+                            mineralFound = true;
                         }
                     }
+                }
+                // if there is nothing to do go explore
+                if (myUnit.isIdle()) {
+                	int randomX = rand.nextInt(game.mapWidth());
+                	int randomY = rand.nextInt(game.mapHeight());
+                	System.out.println("Bored SCV is going to (" + randomX + ", " + randomY + ")");
                 }
 
                 //if a mineral patch was found, send the worker to gather it
@@ -89,7 +113,7 @@ public class TestBot1 extends DefaultBWListener {
         		if (myUnit.getType() == UnitType.Terran_SCV) {
         			//get a nice place to build a supply depot
         			TilePosition buildTile =
-        				game.getBuildLocation(UnitType.Terran_Supply_Depot, self.getStartLocation(), 8);
+        				getBuildTile(myUnit, UnitType.Terran_Supply_Depot, self.getStartLocation());
         			//and, if found, send the worker to build it (and leave others alone - break;)
         			if (buildTile != null) {
         				myUnit.build(UnitType.Terran_Supply_Depot, buildTile);
@@ -97,10 +121,74 @@ public class TestBot1 extends DefaultBWListener {
         			}
         		}
             }
+            
+            //if we have supply and minerals lets build a barrack
+            if ((self.supplyTotal() - self.supplyUsed() > 0) && (self.minerals() > 250) && self.allUnitCount(UnitType.Terran_Barracks) < 2) {
+            	if (myUnit.getType() == UnitType.Terran_SCV) {
+        			//get a nice place to build a barrack
+        			TilePosition buildTile =
+        				getBuildTile(myUnit, UnitType.Terran_Barracks, self.getStartLocation());
+        			//and, if found, send the worker to build it (and leave others alone - break;)
+        			if (buildTile != null) {
+        				myUnit.build(UnitType.Terran_Barracks, buildTile);
+        				break;
+        			}
+        		}
+            }
+            
+            //if we have enough workers and supply build some marines ...
+            if ((self.supplyTotal() - self.supplyUsed() < 2) && (self.minerals() >= 150)) {
+            	//iterate over units to find cc
+        		if (myUnit.getType() == UnitType.Terran_Barracks) {
+        			myUnit.train(UnitType.Terran_Marine);
+        			break;
+        		}
+            }
         }
 
         //draw my units on screen
         game.drawTextScreen(10, 25, units.toString());
+    }
+    
+    public TilePosition getBuildTile(Unit builder, UnitType building, TilePosition startTile) {
+    	TilePosition result = null;
+    	int maxDist = 3;
+    	int stopDist = 40;
+
+    	// Refinery, Assimilator, Extractor
+    	if (building.isRefinery()) {
+    		for (Unit n : game.neutral().getUnits()) {
+    			if ((n.getType() == UnitType.Resource_Vespene_Geyser) &&
+    					( Math.abs(n.getTilePosition().getX() - startTile.getX()) < stopDist ) &&
+    					( Math.abs(n.getTilePosition().getY() - startTile.getY()) < stopDist )
+    					) {
+    				// TODO draw some boxes
+    				return n.getTilePosition();
+    			}
+    		}
+    	}
+    	
+    	// Otherwise look for regular building area
+    	while ((maxDist < stopDist) && result == null) {
+    		for (int i=startTile.getX()-maxDist; i<=startTile.getX()+maxDist; i++) {
+    			for (int j=startTile.getY()-maxDist; j<=startTile.getY()+maxDist; j++) {
+    				if (game.canBuildHere(new TilePosition(i,j), building, builder, false)) {
+    					// units that are blocking the tile
+    					boolean unitsInWay = false;
+    					for (Unit u : game.getAllUnits()) {
+    						if (u.getID() == builder.getID()) continue;
+    						if ((Math.abs(u.getTilePosition().getX()-i) < 4) && (Math.abs(u.getTilePosition().getY()-j) < 4)) unitsInWay = true;
+    					}
+    					if (!unitsInWay) {
+    						return new TilePosition(i, j);
+    					}
+    				}
+    			}
+    		}
+    		maxDist += 2;
+    	}
+    	if (result == null) game.printf("Unable to find suitable build position for "+building.toString());
+    	return result;
     }
 
     public static void main(String[] args) {
