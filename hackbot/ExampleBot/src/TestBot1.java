@@ -52,13 +52,6 @@ public class TestBot1 extends DefaultBWListener {
         	}
         	System.out.println();
         }
-        
-        for (Unit u : self.getUnits()) {
-        	if (u.getType() == UnitType.Terran_SCV) {
-        		workers++;
-        	}
-        }
-
     }
 
     @Override
@@ -89,23 +82,13 @@ public class TestBot1 extends DefaultBWListener {
                 Unit closestMineral = null;
 
                 //find the closest mineral
-                boolean mineralFound = false;
                 for (Unit neutralUnit : game.neutral().getUnits()) {
                     if (neutralUnit.getType().isMineralField()) {
                         if (closestMineral == null || myUnit.getDistance(neutralUnit) < myUnit.getDistance(closestMineral)) {
                             closestMineral = neutralUnit;
-                            mineralFound = true;
                         }
                     }
                 }
-//                // if there is nothing to do go explore
-//                if (!myUnit.isConstructing() || !myUnit.isGatheringMinerals() || !myUnit.isGatheringGas()) {
-//                	int randomX = rand.nextInt(game.mapWidth());
-//                	int randomY = rand.nextInt(game.mapHeight());
-//                	System.out.println("Bored SCV is going to (" + randomX + ", " + randomY + ")");
-//                }
-
-                //if a mineral patch was found, send the worker to gather it
                 if (closestMineral != null) {
                     myUnit.gather(closestMineral, false);
                 }
@@ -126,9 +109,9 @@ public class TestBot1 extends DefaultBWListener {
         		}
             }
             
-            // If there are enough minerals and supply, build a barrack.
+            // If there are enough minerals, supply, and there are at least 12 workers, build a barrack.
             // - Limit barracks to 2
-            if ((self.supplyTotal() - self.supplyUsed() > 0) && (self.minerals() > 250) && self.allUnitCount(UnitType.Terran_Barracks) < 2) {
+            if ((self.minerals() > 250) && self.allUnitCount(UnitType.Terran_Barracks) < 2 && self.allUnitCount(UnitType.Terran_SCV) > 11) {
             	if (myUnit.getType() == UnitType.Terran_SCV) {
         			//get a nice place to build a barrack
         			TilePosition buildTile =
@@ -136,17 +119,16 @@ public class TestBot1 extends DefaultBWListener {
         			//and, if found, send the worker to build it (and leave others alone - break;)
         			if (buildTile != null) {
         				myUnit.build(UnitType.Terran_Barracks, buildTile);
-        				break;
+        				break; // fix pulling all workers off minerals?
         			}
         		}
             }
             
             //if we have enough workers and supply build some marines ...
-            if ((self.supplyUsed() < self.supplyTotal()) && (self.minerals() >= 150)) {
-            	//iterate over units to find cc
-        		if (myUnit.getType() == UnitType.Terran_Barracks) {
+            if ((self.supplyUsed() < self.supplyTotal()) && (self.minerals() >= 150) && self.allUnitCount(UnitType.Terran_Barracks) > 0) {
+            	System.out.println("Trying to train some marines, we are at unit (" + myUnit.toString() + ") a " + myUnit.getType().toString() + " ID: " + myUnit.getID());
+        		if (myUnit.getType() == UnitType.Terran_Barracks && myUnit.getTrainingQueue().size() < 2) {
         			myUnit.train(UnitType.Terran_Marine);
-        			break;
         		}
             }
         }
