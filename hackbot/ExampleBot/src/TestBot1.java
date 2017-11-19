@@ -9,7 +9,7 @@ public class TestBot1 extends DefaultBWListener {
     private Game game;
 
     private Player self;
-    
+
     public void run() {
         mirror.getModule().setEventListener(this);
         mirror.startGame();
@@ -47,27 +47,21 @@ public class TestBot1 extends DefaultBWListener {
     public void onFrame() {
         //game.setTextSize(10);
         game.drawTextScreen(10, 10, "Playing as " + self.getName() + " - " + self.getRace());
-        
+
         StringBuilder units = new StringBuilder("My units:\n");
 
         //iterate through my units
         for (Unit myUnit : self.getUnits()) {
             units.append(myUnit.getType()).append(" ").append(myUnit.getTilePosition()).append("\n");
-//            System.out.println("SUPPLY TOTAL" + self.supplyTotal());
-//            System.out.println("SUPPLY USED" + self.supplyUsed());
-//            System.out.println("SPENT MINERALS" + self.spentMinerals());
-//            System.out.println("COMPLETED UNIT COUNT" + self.completedUnitCount());
-                     
+            game.drawTextMap(myUnit.getPosition().getX(), myUnit.getPosition().getY(),
+        			"TilePos: "+myUnit.getTilePosition().toString()+" Pos: "+myUnit.getPosition().toString());
+            game.drawTextMap(myUnit.getPosition().getX(), myUnit.getPosition().getY(), myUnit.getOrder().toString());
+            game.drawLineMap(myUnit.getPosition().getX(), myUnit.getPosition().getY(), myUnit.getOrderTargetPosition().getX(),
+            		myUnit.getOrderTargetPosition().getY(), bwapi.Color.Black);
 
             //if there's enough minerals, train an SCV
             if (myUnit.getType() == UnitType.Terran_Command_Center && self.minerals() >= 50) {
                 myUnit.train(UnitType.Terran_SCV);
-            }
-            
-            if (self.supplyUsed() >= self.supplyTotal() && myUnit.getType() == UnitType.Terran_SCV) {
-            	if (!myUnit.isGatheringMinerals()) {
-            		myUnit.build(UnitType.Terran_Supply_Depot);
-            	}
             }
 
             //if it's a worker and it's idle, send it to the closest mineral patch
@@ -87,6 +81,21 @@ public class TestBot1 extends DefaultBWListener {
                 if (closestMineral != null) {
                     myUnit.gather(closestMineral, false);
                 }
+            }
+            
+            //if we're running out of supply and have enough minerals ...
+            if ((self.supplyTotal() - self.supplyUsed() < 2) && (self.minerals() >= 100)) {
+            	//iterate over units to find a worker
+        		if (myUnit.getType() == UnitType.Terran_SCV) {
+        			//get a nice place to build a supply depot
+        			TilePosition buildTile =
+        				game.getBuildLocation(UnitType.Terran_Supply_Depot, self.getStartLocation(), 8);
+        			//and, if found, send the worker to build it (and leave others alone - break;)
+        			if (buildTile != null) {
+        				myUnit.build(UnitType.Terran_Supply_Depot, buildTile);
+        				break;
+        			}
+        		}
             }
         }
 
