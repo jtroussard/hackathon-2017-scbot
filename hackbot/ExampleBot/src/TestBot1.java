@@ -13,7 +13,11 @@ public class TestBot1 extends DefaultBWListener {
     
     public int workers;
     public int marines;
-    public List<BaseLocation>;
+    public List<BaseLocation> baseLocations;
+    public BaseLocation targetBase = null;
+    public boolean baseUnlock = true;
+    public Unit SUPPLY = null;
+    public Unit BARRAC = null;
     
     Random rand = new Random();
 
@@ -68,17 +72,23 @@ public class TestBot1 extends DefaultBWListener {
             game.drawTextMap(myUnit.getPosition().getX(), myUnit.getPosition().getY(), myUnit.getOrder().toString());
             game.drawLineMap(myUnit.getPosition().getX(), myUnit.getPosition().getY(), myUnit.getOrderTargetPosition().getX(),
             		myUnit.getOrderTargetPosition().getY(), bwapi.Color.Black);
+            
+            System.out.println(self.getUnits().toString());
 
             // If there are enough minerals, build an SCV
             // - Do not queue more than two SCVs
             // - Standard limit of 30 SCVs
+            System.out.println("At build SCV " + myUnit.getType() + " " + self.minerals() + " " + self.allUnitCount(UnitType.Terran_SCV));
             if (myUnit.getType() == UnitType.Terran_Command_Center && self.minerals() >= 50 && self.allUnitCount(UnitType.Terran_SCV) < 30) {
+            	System.out.println("Check command center queue");
             	if (myUnit.getTrainingQueue().size() < 2) {
+            		System.out.println("Build SCV");
             		myUnit.train(UnitType.Terran_SCV);
             	}
             }
 
             //if it's a worker and it's idle, send it to the closest mineral patch
+            System.out.println("At send SCV to minerals"); 
             if (myUnit.getType().isWorker() && myUnit.isIdle()) {
                 Unit closestMineral = null;
 
@@ -95,54 +105,119 @@ public class TestBot1 extends DefaultBWListener {
                 }
             }
             
-            //if we're running out of supply and have enough minerals ...
-            if ((self.supplyTotal() - self.supplyUsed() < 4) && (self.minerals() >= 100)) {
+            // SUPPLY
+            // If we're running out of supply and have enough minerals ...
+            System.out.println("At build supply");
+            if ((self.supplyTotal() - self.supplyUsed() < 4) && (self.minerals() >= 100) && SUPPLY == null) {
             	//iterate over units to find a worker
+            	System.out.println("111");
         		if (myUnit.getType() == UnitType.Terran_SCV) {
+        			// Lock order with unit
+        			SUPPLY = myUnit;
         			//get a nice place to build a supply depot
         			TilePosition buildTile =
-        				getBuildTile(myUnit, UnitType.Terran_Supply_Depot, self.getStartLocation());
+        				getBuildTile(SUPPLY, UnitType.Terran_Supply_Depot, self.getStartLocation());
         			//and, if found, send the worker to build it (and leave others alone - break;)
+        			System.out.println("119");
         			if (buildTile != null) {
-        				myUnit.build(UnitType.Terran_Supply_Depot, buildTile);
-        				break;
+        				SUPPLY.build(UnitType.Terran_Supply_Depot, buildTile);
         			}
         		}
             }
             
-            // If there are enough minerals, supply, and there are at least 12 workers, build a barrack.
+            if (SUPPLY.isIdle() && self.supplyTotal() - self.supplyUsed() > 4) { // Done constructing?
+            	System.out.println("127");
+            	Unit closestMineral = null;
+
+                for (Unit neutralUnit : game.neutral().getUnits()) {
+                    if (neutralUnit.getType().isMineralField()) {
+                        if (closestMineral == null || myUnit.getDistance(neutralUnit) < myUnit.getDistance(closestMineral)) {
+                            closestMineral = neutralUnit;
+                        }
+                    }
+                }
+                if (closestMineral != null) {
+                    SUPPLY.gather(closestMineral, false);
+                }
+                SUPPLY = null;
+            }
+            
+            // BARRACK
+            // If there are enough minerals, supply, and there are at least 9 workers, build a barrack.
             // - Limit barracks to 3
-            if ((self.minerals() > 250) && self.allUnitCount(UnitType.Terran_Barracks) < 3 && self.allUnitCount(UnitType.Terran_SCV) > 11) {
+            System.out.println("At build barrack");
+            if ((self.minerals() > 250) && self.allUnitCount(UnitType.Terran_Barracks) < 3 && self.allUnitCount(UnitType.Terran_SCV) > 9 && BARRAC == null) {
             	if (myUnit.getType() == UnitType.Terran_SCV) {
+            		// Lock order with unit
+            		BARRAC = myUnit;
         			//get a nice place to build a barrack
         			TilePosition buildTile =
-        				getBuildTile(myUnit, UnitType.Terran_Barracks, self.getStartLocation());
+        				getBuildTile(BARRAC, UnitType.Terran_Barracks, self.getStartLocation());
         			//and, if found, send the worker to build it (and leave others alone - break;)
         			if (buildTile != null) {
-        				myUnit.build(UnitType.Terran_Barracks, buildTile);
+        				BARRAC.build(UnitType.Terran_Barracks, buildTile);
+        				System.out.println("BREAK BREAK BREAK");
         				break; // fix pulling all workers off minerals?
         			}
         		}
+            } else if (BARRAC.isIdle()) { // Done constructing?
+            	Unit closestMineral = null;
+
+                for (Unit neutralUnit : game.neutral().getUnits()) {
+                    if (neutralUnit.getType().isMineralField()) {
+                        if (closestMineral == null || myUnit.getDistance(neutralUnit) < myUnit.getDistance(closestMineral)) {
+                            closestMineral = neutralUnit;
+                        }
+                    }
+                }
+                if (closestMineral != null) {
+                    BARRAC.gather(closestMineral, false);
+                }
+                BARRAC = null;
             }
             
             //if we have enough workers and supply build some marines ...
+            System.out.println("At build some marines");
             if ((self.supplyUsed() < self.supplyTotal()) && (self.minerals() >= 150) && self.allUnitCount(UnitType.Terran_Barracks) > 0) {
         		if (myUnit.getType() == UnitType.Terran_Barracks && myUnit.getTrainingQueue().size() < 2) {
         			myUnit.train(UnitType.Terran_Marine);
         		}
             }
-            
-          // If this unit is a marine attack around the base
-            if (self.allUnitCount(UnitType.Terran_Marine) > 30 && myUnit.getType() == UnitType.Terran_Barracks) {
-            	double longest = 0;
-            	BaseLocation targetBase = null;
+            System.out.println("attack stuff");
+            // Attack stuff
+            if (self.allUnitCount(UnitType.Terran_Marine) > 30 && baseUnlock) {
             	for (BaseLocation b : BWTA.getBaseLocations()) {
-            		if (myUnit.getPosition().getDistance(b.getPosition()) > longest) {
+            		if (!baseLocations.contains(b)) {
+            			baseLocations.add(b);
             			targetBase = b;
+            			baseUnlock = false;
             		}
             	}
-            	myUnit.attack(targetBase.getPosition());
+            	if (!myUnit.getType().isWorker()) {
+            		myUnit.attack(targetBase.getPosition());
+            	}
+            } else if (self.allUnitCount(UnitType.Terran_Marine) > 30 && !baseUnlock) {
+            	List<Unit> localUnits = game.getRegionAt(targetBase.getPosition()).getUnits();
+            	int localCount = 0;
+            	boolean inBattle = false;
+            	
+            	for (Unit u : localUnits) { // Do we have 30 marines there yet?
+            		if (!u.getType().isWorker()) {
+            			localCount++;
+            		}
+            		if (u.isAttacking()) { // Are we seeing any action?
+            			inBattle = true;
+            		}
+            	}
+            	if (localCount >= 30 && !inBattle) { // If we have arrived at a base and see no action, reset lock and move on
+            		baseUnlock = true;
+            	} else if (localCount >= 30 && !inBattle) { // Keep sendinf troops
+            		if (!myUnit.getType().isWorker()) {
+            			myUnit.attack(targetBase.getPosition());
+            		}
+            	}
             }
+            System.out.println(self.getUnits().toString());
         }
 
         //draw my units on screen
